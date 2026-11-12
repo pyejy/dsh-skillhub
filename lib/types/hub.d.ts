@@ -91,6 +91,11 @@ export declare class SkillHub {
      * the child switch without rewriting the child's stored value.
      */
     bundleCatalog(bundles: readonly BundlePlugin[], query?: CatalogQuery): BundleCatalog;
+    /** Effective gate and deciding layer of one arbitrary key (`group:` rows) at this scope. */
+    gateOf(query: CatalogQuery, id: string): {
+        gate: Gate;
+        source: LayerName;
+    };
     /** Write one package or package-skill gate into the requested layer document. */
     toggleBundle(query: {
         layer: LayerName;

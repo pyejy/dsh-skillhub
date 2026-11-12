@@ -12,10 +12,18 @@
 - 供电校验：读取插件贡献时会核对 Loader 里的启用状态。在插件管理器里被停用的包不再参与接管，它的技能也不会因为磁盘上还留着文件而被重新供给；重新启用后自动恢复（缓存保留，只在实际读取时过滤）。
 - 发现：启动时从技能注册表取「provider 不是本插件、且文件位于 `node_modules` 内」的技能，再按包内 `skills/`、`own-skills/` 重扫补全，结果缓存到 `$DSH_HOME/skillhub/bundles.json`；包增减技能会自动跟上。
 
+### 新功能：组合层级
+
+- 面板新增第四个视图「组合」，把「属于同一件事」的技能与 MCP 服务收在一个总开关下：
+  - **能力组合**：技能与 MCP 服务器同名（如 `abaqus` ↔ `abaqus`）时自动成为一组；
+  - **家族组合**：`<base>-*` 且 `<base>` 本身也是技能时（如 `ponytail` + `ponytail-audit/-debt/-gain/-help/-review`、`office` + `office-*`）收成一组。
+- 组合关闭时，成员在组合页、技能页、MCP 页**一律显示为关、置灰、不可点击**，并标注由哪个组合关闭；成员自己存的值不变，组合重新打开即恢复。
+- 闸门键 `group:<名字>`，与插件/技能/MCP 共用同一份三层作用域文档。接口 `GET /skillhub/groups`、`POST /skillhub/groups/toggle`。
+
 ### 工程
 
 - 新增 `scripts/build-local.mjs`：不依赖 DSHX checkout，用 esbuild + lightningcss 直接产出宿主 bundle 和浏览器 bundle（`node scripts/build-local.mjs [host|client|all]`），并把 `esbuild` 加进 devDependencies。
-- 新增 `tsconfig.client.json`（客户端类型检查）与 `tests/bundles.test.mjs`（包归属解析、包扫描、缓存往返、发现合并、父级闸门与置灰语义、项目层传导、影子 provider 的 rank 与可见性）。
+- 新增 `tsconfig.client.json`（客户端类型检查）与 `tests/bundles.test.mjs`（包归属解析、包扫描、缓存往返、发现合并、父级闸门与置灰语义、项目层传导、影子 provider 的 rank 与可见性；以及组合的合并规则与「父关锁子」语义）。
 
 ## 1.0.10
 

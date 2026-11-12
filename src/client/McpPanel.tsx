@@ -16,6 +16,12 @@ export interface McpPanelProps {
   canWriteSession: boolean
   canWriteProject: boolean
   layerReady: boolean
+  /**
+   * Servers closed by an off group, mapped to the group name. Those rows draw
+   * the closed state and never post: the group owns the lock, the server keeps
+   * its stored gate.
+   */
+  lockedServers?: ReadonlyMap<string, string> | undefined
   onServerCountChange?: ((count: number) => void) | undefined
   onBulkActions?: ((actions: McpBulkActions | undefined) => void) | undefined
   t: Translate<SkillHubKey>
@@ -99,14 +105,17 @@ export function McpPanel(props: McpPanelProps) {
   }
   const bulkActions = useMemo<McpBulkActions | undefined>(() => {
     if (!catalog?.servers.length) return undefined
-    const names = catalog.servers.filter(server => server.supported || server.gate === 'off').map(server => server.name)
+    // A server locked by a group is not ours to write: bulk must skip it, or it
+    // would overwrite the value the server is meant to keep.
+    const writable = catalog.servers.filter(server => !(props.lockedServers?.has(server.name) ?? false))
+    const names = writable.filter(server => server.supported || server.gate === 'off').map(server => server.name)
     return {
-      allOn: () => void update(catalog.servers.map(server => server.name), true),
+      allOn: () => void update(writable.map(server => server.name), true),
       allOff: () => void update(names, false),
-      disabled: !layerReady || busy,
+      disabled: !layerReady || busy || writable.length === 0,
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [catalog, key, layerReady, busy])
+  }, [catalog, key, layerReady, busy, props.lockedServers])
   useEffect(() => {
     props.onBulkActions?.(bulkActions)
     return () => props.onBulkActions?.(undefined)
@@ -128,20 +137,28 @@ export function McpPanel(props: McpPanelProps) {
         <p className={css.emptyDesc}>{t('mcp.empty.desc')}</p>
       </div> : null}
       {catalog !== undefined && catalog.servers.length > 0 ? <div className={css.mcpList}>
-        {catalog.servers.map(server => <div key={server.name} className={css.row} data-leaf="">
-          <span className={css.chevronGhost} />
-          <div className={css.cell}><div className={css.name}>
-            <span className={css.nameText}>{server.name}</span>
-            <Tag tone="quiet">{t('mcp.tools', { n: server.tools })}</Tag>
-            {!server.supported ? <Tag tone="warning">{t('mcp.unsupported')}</Tag> : null}
-          </div></div>
-          <div className={css.actions}><GateSwitch
-            gate={server.gate}
-            label={t('switch.mcp', { name: server.name, state: gateWord(t, server.gate) })}
-            disabled={!layerReady || busy || (!server.supported && server.gate === 'on')}
-            onChange={on => void update([server.name], on)}
-          /></div>
-        </div>)}
+        {catalog.servers.map(server => {
+          const lockedBy = props.lockedServers?.get(server.name)
+          // A locked row shows the closed state and stays inert: the group owns
+          // the lock and the server keeps its own stored gate.
+          const gate = lockedBy === undefined ? server.gate : 'off'
+          return <div key={server.name} className={css.row} data-leaf=""
+            data-locked={lockedBy === undefined ? undefined : ''}
+            title={lockedBy === undefined ? undefined : t('groups.lockedBy', { name: lockedBy })}>
+            <span className={css.chevronGhost} />
+            <div className={css.cell}><div className={css.name}>
+              <span className={css.nameText}>{server.name}</span>
+              <Tag tone="quiet">{t('mcp.tools', { n: server.tools })}</Tag>
+              {!server.supported ? <Tag tone="warning">{t('mcp.unsupported')}</Tag> : null}
+            </div></div>
+            <div className={css.actions}><GateSwitch
+              gate={gate}
+              label={t('switch.mcp', { name: server.name, state: gateWord(t, gate) })}
+              disabled={!layerReady || busy || lockedBy !== undefined || (!server.supported && server.gate === 'on')}
+              onChange={on => { if (lockedBy === undefined) void update([server.name], on) }}
+            /></div>
+          </div>
+        })}
       </div> : null}
     </div>
   )

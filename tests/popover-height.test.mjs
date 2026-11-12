@@ -58,10 +58,13 @@ async function browserEnv() {
   const { rolldown } = await import(pathToFileURL(toolRequire.resolve('rolldown')).href)
   const primitives = resolve(harness, 'packages/client/ui-primitives/lib/index.js')
   const primitiveRequire = createRequire(primitives)
+  // Harness 0.2.2 removed useAnchoredPosition and added the icons the plugin and
+  // group tabs use; the stub must import exactly what the built client requires.
   const names = ['Button', 'IconChevronRightOutlineRegular', 'IconCordisPluginOutlineRegular',
-    'IconEllipsisOutlineRegular', 'IconSearchOutlineRegular', 'IconSkillOutlineRegular',
-    'IconWarningOutlineRegular', 'Input', 'Menu', 'Pill', 'Tag', 'Toast', 'Tooltip',
-    'writeClipboard', 'useAnchoredPosition']
+    'IconEllipsisOutlineRegular', 'IconPluginPinwheelOutlineRegular', 'IconSearchOutlineRegular',
+    'IconSkillOutlineRegular', 'IconWarningOutlineRegular', 'IconWorkspaceTreeOutlineRegular',
+    'Input', 'Menu', 'Pill', 'Tag', 'Toast', 'Tooltip',
+    'writeClipboard']
   const entry = join(tmpdir(), 'skillhub-popover-height-entry.mjs')
   const { writeFile } = await import('node:fs/promises')
   await writeFile(entry, `

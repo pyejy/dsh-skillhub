@@ -1,6 +1,8 @@
 import type { installMcpVisibility } from './mcp-runtime.ts'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { BundlePlugin } from './bundles.ts'
+import { groupGateId, computeGroups } from './groups.ts'
+import type { Gate } from './catalog.ts'
 import type { Catalog, HomeKind, SkillId } from './catalog.ts'
 import type { LayerName, SkillHub, ToggleTarget, VisibilityTarget } from './hub.ts'
 
@@ -112,6 +114,25 @@ function toggleTarget(body: Record<string, unknown>): ToggleTarget {
   return { ...visibilityTarget(body), on: body['on'] }
 }
 
+/**
+ * Groups of the requested scope: skills sharing a base name plus the MCP server
+ * of the same name. A group is a view with its own gate, so members keep their
+ * stored value and only inherit the lock.
+ */
+function groupsPayload(
+  hub: SkillHub,
+  mcp: ReturnType<typeof installMcpVisibility> | undefined,
+  query: { sessionId?: string; folder?: string; layer?: LayerName; resolved: boolean },
+): { layer: LayerName; groups: ReturnType<typeof computeGroups> } {
+  const catalog = hub.catalog(query)
+  const servers = mcp === undefined ? [] : mcp.catalog(query).servers
+  const groups = computeGroups({
+    skills: catalog.inventory.map(skill => ({ id: skill.id, name: skill.name, gate: skill.gate, source: skill.source })),
+    servers,
+  }, name => hub.gateOf(query, groupGateId(name)) as { gate: Gate; source: LayerName })
+  return { layer: catalog.layer ?? 'global', groups }
+}
+
 export function handleSkillHubHttp(
   hub: SkillHub,
   invalidate: () => void,
@@ -138,6 +159,10 @@ export function handleSkillHubHttp(
         send(res, 200, mcp.catalog(query(url)))
         return
       }
+      if (req.method === 'GET' && path === '/groups') {
+        send(res, 200, groupsPayload(hub, mcp, query(url)))
+        return
+      }
       if (req.method === 'GET' && path === '/bundles') {
         send(res, 200, hub.bundleCatalog(bundles?.() ?? [], query(url)))
         return
@@ -160,6 +185,25 @@ export function handleSkillHubHttp(
         for (const key of ['folder', 'sessionId']) if (body[key] !== undefined && typeof body[key] !== 'string') throw new Error(`invalid ${key}`)
         const q: import('./mcp.ts').McpCatalogQuery = { layer, ...(typeof body['folder'] === 'string' ? { folder: body['folder'] } : {}), ...(typeof body['sessionId'] === 'string' ? { sessionId: body['sessionId'] } : {}) }
         send(res, 200, mcp.mutate(q, body['server'], path === '/mcp/toggle' ? body['on'] as boolean : undefined))
+        return
+      }
+      if (path === '/groups/toggle') {
+        const layer = body['layer']
+        if (layer !== 'global' && layer !== 'project' && layer !== 'session') {
+          send(res, 400, { error: 'invalid layer' })
+          return
+        }
+        if (typeof body['name'] !== 'string' || body['name'] === '') throw new Error('name required')
+        if (typeof body['on'] !== 'boolean') throw new Error('on must be boolean')
+        hub.toggleBundle({
+          layer,
+          id: groupGateId(body['name']),
+          on: body['on'],
+          ...typeof body['sessionId'] === 'string' ? { sessionId: body['sessionId'] } : {},
+          ...typeof body['folder'] === 'string' ? { folder: body['folder'] } : {},
+        })
+        invalidate()
+        send(res, 200, groupsPayload(hub, mcp, query(url)))
         return
       }
       if (path === '/bundles/toggle') {

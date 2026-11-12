@@ -260,7 +260,8 @@
 
 .body,
 .mcpBody,
-.pluginBody {
+.pluginBody,
+.groupBody {
   display: flex;
   min-height: 0;
   flex: 1 1 auto;
@@ -274,7 +275,8 @@
 
 .root[data-surface='popover'] .body,
 .root[data-surface='popover'] .mcpBody,
-.root[data-surface='popover'] .pluginBody {
+.root[data-surface='popover'] .pluginBody,
+.root[data-surface='popover'] .groupBody {
   flex: 1 1 0;
   height: auto;
   overflow-y: auto;
@@ -337,8 +339,10 @@
 .root[aria-busy='true'] .body,
 .root[aria-busy='true'] .mcpBody,
 .root[aria-busy='true'] .pluginBody,
+.root[aria-busy='true'] .groupBody,
 .mcpBody[aria-busy='true'],
-.pluginBody[aria-busy='true'] {
+.pluginBody[aria-busy='true'],
+.groupBody[aria-busy='true'] {
   opacity: .72;
 }
 
@@ -653,6 +657,32 @@
 /* The row already dims the switch; do not stack the disabled opacity on top. */
 .row[data-locked] .switch:disabled {
   opacity: 1;
+}
+
+/* Composition layer: a group row owns the members it locks. A closed group dims
+ * those rows, states the reason once above them, and never rewrites the value
+ * stored for a member. */
+
+.groupList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.group {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Type hint next to the group name: capability vs skill family. */
+.groupKind {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 17px;
+  white-space: nowrap;
 }
 
 /* Aligned with the skill names one indent in: row padding, one depth step,

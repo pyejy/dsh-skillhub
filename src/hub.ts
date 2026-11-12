@@ -260,6 +260,13 @@ export class SkillHub {
     })
     return { layer, plugins }
   }
+  /** Effective gate and deciding layer of one arbitrary key (`group:` rows) at this scope. */
+  gateOf(query: CatalogQuery, id: string): { gate: Gate; source: LayerName } {
+    const layer = resolvedLayer(query)
+    const folder = optionalFolder(query.folder)
+    this.documentPath(layer, query.sessionId, folder)
+    return resolveIdGate(id, this.layerInput(layer, query.sessionId, folder))
+  }
   /** Write one package or package-skill gate into the requested layer document. */
   toggleBundle(query: { layer: LayerName; sessionId?: string; folder?: string; id: string; on: boolean }): void {
     const folder = optionalFolder(query.folder)

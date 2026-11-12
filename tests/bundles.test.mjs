@@ -198,3 +198,50 @@ test('a package the loader has switched off contributes nothing', () => {
     cleanup()
   }
 })
+
+// --- groups -------------------------------------------------------------
+
+const { computeGroups, groupGateId } = await import('../lib/types/groups.js')
+
+const skill = (name, gate = 'on') => ({ id: `dsh:${name}/SKILL.md`, name, gate, source: 'global' })
+const server = (name, gate = 'on') => ({ name, tools: 1, gate, source: 'global' })
+
+test('a skill and an MCP server of the same name form one capability', () => {
+  const on = () => ({ gate: 'on', source: 'global' })
+  const groups = computeGroups({ skills: [skill('abaqus')], servers: [server('abaqus')] }, on)
+  assert.equal(groups.length, 1)
+  assert.equal(groups[0].name, 'abaqus')
+  assert.equal(groups[0].kind, 'capability')
+  assert.deepEqual(groups[0].skills.map(row => row.name), ['abaqus'])
+  assert.deepEqual(groups[0].servers.map(row => row.name), ['abaqus'])
+  assert.equal(groups[0].skills[0].effective, 'on')
+  assert.equal(groupGateId('abaqus'), 'group:abaqus')
+})
+
+test('skills sharing an existing base name become one family', () => {
+  const on = () => ({ gate: 'on', source: 'global' })
+  const groups = computeGroups({
+    skills: [skill('ponytail'), skill('ponytail-audit'), skill('ponytail-help'), skill('kb-search')],
+    servers: [],
+  }, on)
+  assert.deepEqual(groups.map(group => group.name), ['ponytail'])
+  assert.equal(groups[0].kind, 'family')
+  assert.deepEqual(groups[0].skills.map(row => row.name), ['ponytail', 'ponytail-audit', 'ponytail-help'])
+  // `kb-search` has no `kb` skill, so the prefix is part of the name, not a family.
+  assert.equal(groups.some(group => group.name === 'kb'), false)
+})
+
+test('an off group locks every member without rewriting its own gate', () => {
+  const off = () => ({ gate: 'off', source: 'project' })
+  const groups = computeGroups({
+    skills: [skill('abaqus', 'on'), skill('abaqus-run', 'off')],
+    servers: [server('abaqus', 'on')],
+  }, off)
+  const group = groups[0]
+  assert.equal(group.gate, 'off')
+  assert.equal(group.source, 'project')
+  assert.ok(group.skills.every(row => row.locked && row.effective === 'off'))
+  assert.equal(group.skills[0].gate, 'on', 'the member gate itself is untouched')
+  assert.ok(group.servers.every(row => row.locked && row.effective === 'off'))
+  assert.equal(group.servers[0].gate, 'on')
+})
