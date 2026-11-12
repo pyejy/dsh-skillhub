@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import {
-  discoverBundles, loadBundles, packageOf, saveBundles, scanPackage,
+  barePackageName, discoverBundles, filterActive, loadBundles, packageOf, saveBundles, scanPackage,
 } from '../lib/types/bundles.js'
 import { SkillHub } from '../lib/types/hub.js'
 import { createBundleProvider } from '../lib/types/provider.js'
@@ -171,6 +171,29 @@ test('the shadow provider outranks packaged skills and carries the gate', async 
     assert.equal(off.length, 2, 'a switched-off skill is still shadowed so the packaged copy cannot surface')
     assert.ok(off.every(candidate => candidate.invocation.modelInvocable === false))
     assert.ok(off.every(candidate => candidate.invocation.userInvocable === false))
+  } finally {
+    cleanup()
+  }
+})
+
+test('loader row specifiers resolve to bare package names only', () => {
+  assert.equal(barePackageName('dsh-guizang-design'), 'dsh-guizang-design')
+  assert.equal(barePackageName('@aa2246740/dsh-skillhub'), '@aa2246740/dsh-skillhub')
+  assert.equal(barePackageName('@aa2246740/dsh-skillhub/enhance'), undefined)
+  assert.equal(barePackageName('./src/patch.ts'), undefined)
+  assert.equal(barePackageName('file:///Users/x/plugin.js'), undefined)
+  assert.equal(barePackageName('cordis:include'), undefined)
+})
+
+test('a package the loader has switched off contributes nothing', () => {
+  const { root, cleanup } = fixture()
+  try {
+    const plugin = { name: 'fake-plugin', root, skills: scanPackage(root) }
+    // Unknown loader state filters nothing (previous behaviour).
+    assert.equal(filterActive([plugin], undefined).length, 1)
+    assert.equal(filterActive([plugin], new Set(['fake-plugin'])).length, 1)
+    // Switched off in the plugin manager: the shadow provider must not keep serving it.
+    assert.equal(filterActive([plugin], new Set(['dsh-unlag'])).length, 0)
   } finally {
     cleanup()
   }

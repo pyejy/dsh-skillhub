@@ -26,6 +26,38 @@ interface BundleDocument {
   readonly plugins: readonly BundlePlugin[]
 }
 
+/**
+ * Bare package name of a loader row specifier.
+ * @param specifier - row module specifier (`@scope/pkg`, `pkg`, `pkg/sub`, a path or a URL).
+ * @returns the package name for a package-root row, otherwise undefined.
+ */
+export function barePackageName(specifier: string): string | undefined {
+  if (specifier.startsWith('@')) {
+    const parts = specifier.split('/')
+    return parts.length === 2 && (parts[1] ?? '') !== '' ? specifier : undefined
+  }
+  return specifier !== '' && !specifier.includes('/') && !specifier.includes(':') ? specifier : undefined
+}
+
+/**
+ * Keep only packages the loader currently has enabled.
+ *
+ * A package that is installed but switched off in the plugin manager contributes
+ * nothing, so its skills must not be shadowed either — otherwise this plugin
+ * would keep serving skills for a disabled package. An unknown set (loader
+ * unreachable) filters nothing, which is the pre-existing behaviour.
+ * @param plugins - discovered package contributions.
+ * @param active - enabled package names, or undefined when the loader state is unknown.
+ * @returns the contributions whose package is live.
+ */
+export function filterActive(
+  plugins: readonly BundlePlugin[],
+  active: ReadonlySet<string> | undefined,
+): BundlePlugin[] {
+  if (active === undefined) return [...plugins]
+  return plugins.filter(plugin => active.has(plugin.name))
+}
+
 /** Skill providers that own the disk homes; their skills are not package contributions. */
 const SKILLHUB_PROVIDERS = new Set(['skillhub', 'skillhub-propagation', 'skillhub-bundles'])
 

@@ -7,7 +7,7 @@ import type { SkillProviderControl } from '@deepseek-ai/dsh-skill'
 import z from '@deepseek-ai/schemastery'
 import { McpHub } from './mcp.ts'
 import { installMcpVisibility } from './mcp-runtime.ts'
-import { discoverBundles, loadBundles, type BundlePlugin } from './bundles.ts'
+import { barePackageName, discoverBundles, filterActive, loadBundles, type BundlePlugin } from './bundles.ts'
 import { SkillHub } from './hub.ts'
 import { handleSkillHubHttp } from './http.ts'
 import { createBundleProvider, createSkillHubProvider } from './provider.ts'
@@ -64,8 +64,10 @@ export function apply(ctx: Context, config: Config) {
   })
   // Package-shipped skills: the cache is what the panel and the shadow provider
   // read; the live registry only teaches it about packages it has not seen yet.
+  // A package switched off in the plugin manager contributes nothing, so it is
+  // filtered out at read time — the cache keeps it for when it comes back.
   let plugins: readonly BundlePlugin[] = loadBundles(defaultStoreDir())
-  const readPlugins = (): readonly BundlePlugin[] => plugins
+  const readPlugins = (): readonly BundlePlugin[] => filterActive(plugins, enabledPackages(ctx))
   ctx.skills.registerProvider(() => createBundleProvider(hub, readPlugins))
   void discoverBundles(ctx.skills, defaultStoreDir()).then((next) => {
     plugins = next
@@ -102,6 +104,34 @@ export function apply(ctx: Context, config: Config) {
   const agents = ctx.get('agents') as { list(): object[] } | undefined
   for (const agent of agents?.list() ?? []) attach({ agent })
   console.log('[my-plugins/dsh-skillhub] http /skillhub')
+}
+
+/**
+ * Bare package names the Host loader currently has enabled.
+ *
+ * The loader is read opportunistically: a checkout without the service (or an
+ * unexpected shape) reports `undefined`, which filters nothing and keeps the
+ * previous behaviour instead of hiding every package.
+ * @param ctx - the plugin context.
+ * @returns enabled package names, or undefined when the loader state is unknown.
+ */
+function enabledPackages(ctx: Context): ReadonlySet<string> | undefined {
+  const loader = ctx.get('loader') as
+    { entries?: () => Iterable<{ options?: { name?: unknown }; disabled?: boolean }> } | undefined
+  if (typeof loader?.entries !== 'function') return undefined
+  const names = new Set<string>()
+  try {
+    for (const entry of loader.entries()) {
+      if (entry === null || typeof entry !== 'object' || entry.disabled === true) continue
+      const name = entry.options?.name
+      if (typeof name !== 'string') continue
+      const bare = barePackageName(name)
+      if (bare !== undefined) names.add(bare)
+    }
+  } catch {
+    return undefined
+  }
+  return names
 }
 
 /** Chat identity of one created agent, for the provider registered under it. */

@@ -15,6 +15,24 @@ export interface BundlePlugin {
     readonly root: string;
     readonly skills: readonly BundleSkill[];
 }
+/**
+ * Bare package name of a loader row specifier.
+ * @param specifier - row module specifier (`@scope/pkg`, `pkg`, `pkg/sub`, a path or a URL).
+ * @returns the package name for a package-root row, otherwise undefined.
+ */
+export declare function barePackageName(specifier: string): string | undefined;
+/**
+ * Keep only packages the loader currently has enabled.
+ *
+ * A package that is installed but switched off in the plugin manager contributes
+ * nothing, so its skills must not be shadowed either — otherwise this plugin
+ * would keep serving skills for a disabled package. An unknown set (loader
+ * unreachable) filters nothing, which is the pre-existing behaviour.
+ * @param plugins - discovered package contributions.
+ * @param active - enabled package names, or undefined when the loader state is unknown.
+ * @returns the contributions whose package is live.
+ */
+export declare function filterActive(plugins: readonly BundlePlugin[], active: ReadonlySet<string> | undefined): BundlePlugin[];
 /** Where the discovered package skills are cached between Host loads. */
 export declare function bundlesPath(storeDir: string): string;
 /** Read the cached package contributions; a corrupt cache is rebuilt, never fatal. */
