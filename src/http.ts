@@ -201,7 +201,11 @@ export function handleSkillHubHttp(
         // A group is a master switch: carrying it to the members is what makes
         // "open the group" mean "everything under it works", instead of leaving
         // the children on their own older values while the parent claims on.
-        const before = groupsPayload(hub, mcp, query(url)).groups.find(group => group.name === body['name'])
+        // The scope lives in the body, never in the URL: reading it from the
+        // query made the reply a GLOBAL snapshot, so the panel briefly rendered
+        // every other group with the global values and then snapped back.
+        const scopeQuery = { ...scope, resolved: true }
+        const before = groupsPayload(hub, mcp, scopeQuery).groups.find(group => group.name === body['name'])
         if (before === undefined) throw new Error('no such group')
         hub.toggleBundle({ ...scope, id: groupGateId(before.name), on: body['on'] })
         for (const member of before.skills) hub.toggleBundle({ ...scope, id: member.id, on: body['on'] })
@@ -209,7 +213,7 @@ export function handleSkillHubHttp(
           for (const member of before.servers) mcp.mutate(scope, member.name, body['on'])
         }
         invalidate()
-        send(res, 200, groupsPayload(hub, mcp, query(url)))
+        send(res, 200, groupsPayload(hub, mcp, scopeQuery))
         return
       }
       if (path === '/bundles/toggle') {
