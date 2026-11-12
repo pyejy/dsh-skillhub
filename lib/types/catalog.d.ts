@@ -171,6 +171,17 @@ export interface ResolveInput {
      */
     readonly composeChain?: boolean;
 }
+/**
+ * Resolve one gate id outside the disk inventory (package plugins and the
+ * skills they ship) through the same Global→Project→Chat chain.
+ * @param id - gate key, for example `plugin:dsh-guizang-design`.
+ * @param input - the same layer documents the catalog receives.
+ * @returns the winning gate and the layer that decided it.
+ */
+export declare function resolveIdGate(id: string, input: ResolveInput): {
+    gate: Gate;
+    source: VisibilityLayer;
+};
 export declare function resolveCatalog(input: ResolveInput): Catalog;
 export declare function findGroupByRel(node: PackNode | GroupNode, rel: string): PackNode | GroupNode | undefined;
 export declare function descendantSkillIds(node: PackNode | GroupNode): SkillId[];

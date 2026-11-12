@@ -1,6 +1,7 @@
 import type { SkillProvider } from '@deepseek-ai/dsh-skill';
 import type { Catalog, ManagedSkill } from './catalog.ts';
 import type { SkillHub } from './hub.ts';
+import { type BundlePlugin } from './bundles.ts';
 /**
  * Resolve the chat whose visibility layer applies to a lookup.
  *
@@ -32,4 +33,16 @@ export declare function providerSkillsFromCatalog(catalog: Catalog): ManagedSkil
  * @param boundSessionId - chat this provider belongs to, when it is agent-scoped.
  */
 export declare function createSkillHubProvider(hub: SkillHub, boundSessionId?: string): SkillProvider;
+/**
+ * Provider that owns every skill shipped inside an installed package.
+ *
+ * The packaged provider keeps its own registration; this one only has to win the
+ * name (lower rank) and carry the gate as `modelInvocable`, so switching a
+ * plugin or one of its skills off removes it from the model catalog without
+ * touching the package or the loader.
+ * @param hub - visibility store backing the package gates.
+ * @param bundles - current package contributions; read on every call so a rediscovery is picked up.
+ * @returns the provider the registry reads.
+ */
+export declare function createBundleProvider(hub: SkillHub, bundles: () => readonly BundlePlugin[]): SkillProvider;
 //# sourceMappingURL=provider.d.ts.map

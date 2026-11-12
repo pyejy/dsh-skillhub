@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.1.0
+
+### 新功能：插件层级
+
+- 面板新增第三个视图「插件」，与「技能」「MCP」并列。插件是一组技能的上级：
+  - 插件行显示包名和它提供的技能数量，一个开关管整包；
+  - 展开后可以单独开关这个包里的每个技能；
+  - **上级插件关闭时，它的技能自动变为关闭并置灰、不可操作**，并标注「由上级插件关闭」。子项自己存的值不会被改写，插件重新打开后立即恢复原来的开关状态。
+- 实现方式：SkillHub 再注册一个 rank 340 的影子 provider，按名字接管包内技能（打包技能用的是 `BUNDLED_SKILL_RANK = 600`，rank 小的赢），由它决定这些技能对模型是否可见；插件与技能闸门沿用现有三层作用域（全局 / 本项目 / 本对话），键名为 `plugin:<包名>` 与 `bundle:<包名>:<技能名>`，仍然是 version 2 文档，旧数据无需迁移。
+- 发现：启动时从技能注册表取「provider 不是本插件、且文件位于 `node_modules` 内」的技能，再按包内 `skills/`、`own-skills/` 重扫补全，结果缓存到 `$DSH_HOME/skillhub/bundles.json`；包增减技能会自动跟上。
+
+### 工程
+
+- 新增 `scripts/build-local.mjs`：不依赖 DSHX checkout，用 esbuild + lightningcss 直接产出宿主 bundle 和浏览器 bundle（`node scripts/build-local.mjs [host|client|all]`），并把 `esbuild` 加进 devDependencies。
+- 新增 `tsconfig.client.json`（客户端类型检查）与 `tests/bundles.test.mjs`（包归属解析、包扫描、缓存往返、发现合并、父级闸门与置灰语义、项目层传导、影子 provider 的 rank 与可见性）。
+
 ## 1.0.10
 
 ### 适配 DeepSeek Harness 0.2.2

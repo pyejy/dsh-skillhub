@@ -5,10 +5,19 @@ import { scopeOf } from '@deepseek-ai/dsh-scope'
 import type { SkillCandidate, SkillDefinition, SkillLookupOptions, SkillProvider, SkillViewOptions } from '@deepseek-ai/dsh-skill'
 import type { Catalog, ManagedSkill } from './catalog.ts'
 import type { SkillHub } from './hub.ts'
+import { readBundleSkill, type BundlePlugin } from './bundles.ts'
 
 const PROVIDER = 'skillhub'
 const USER_DSH_RANK = 350
 const USER_AGENTS_RANK = 351
+/**
+ * Package-shipped skills rank below every disk provider and below
+ * `BUNDLED_SKILL_RANK` (600), so a shadow candidate wins the name and the
+ * registry asks this plugin for the body — that is what lets a packaged skill
+ * be switched off at all.
+ */
+const BUNDLE_PROVIDER = 'skillhub-bundles'
+const BUNDLE_RANK = 340
 
 /**
  * Read a session id out of a value that may be an id, a plain `{ session }`
@@ -151,6 +160,83 @@ export function createSkillHubProvider(hub: SkillHub, boundSessionId?: string): 
         resourceBase: { kind: 'directory', path: locator.directory ?? dirname(locator.path) },
         path: locator.path,
         content: body,
+      }
+    },
+  }
+}
+
+/** Locator handed back by {@link createBundleProvider} for one package skill. */
+interface BundleLocator {
+  readonly path: string
+  readonly directory: string
+  readonly effective: 'on' | 'off'
+}
+
+/**
+ * Provider that owns every skill shipped inside an installed package.
+ *
+ * The packaged provider keeps its own registration; this one only has to win the
+ * name (lower rank) and carry the gate as `modelInvocable`, so switching a
+ * plugin or one of its skills off removes it from the model catalog without
+ * touching the package or the loader.
+ * @param hub - visibility store backing the package gates.
+ * @param bundles - current package contributions; read on every call so a rediscovery is picked up.
+ * @returns the provider the registry reads.
+ */
+export function createBundleProvider(
+  hub: SkillHub,
+  bundles: () => readonly BundlePlugin[],
+): SkillProvider {
+  return {
+    name: BUNDLE_PROVIDER,
+    async list(options: SkillLookupOptions): Promise<SkillCandidate[]> {
+      try {
+        const view = options as SkillViewOptions
+        const sessionId = sessionIdFromScope(view.scope)
+        const query: { sessionId?: string; folder?: string } = {}
+        if (sessionId !== undefined) query.sessionId = sessionId
+        if (options.cwd !== undefined) query.folder = resolve(options.cwd)
+        const catalog = hub.bundleCatalog(bundles(), query)
+        const candidates: SkillCandidate[] = []
+        for (const plugin of catalog.plugins) {
+          const source = bundles().find(entry => entry.name === plugin.name)
+          if (source === undefined) continue
+          for (const row of plugin.skills) {
+            const skill = source.skills.find(entry => entry.name === row.name)
+            if (skill === undefined) continue
+            candidates.push({
+              name: skill.name,
+              description: skill.description,
+              ...skill.whenToUse !== undefined ? { whenToUse: skill.whenToUse } : {},
+              invocation: { modelInvocable: row.effective === 'on', userInvocable: row.effective === 'on' },
+              source: 'bundled',
+              provider: BUNDLE_PROVIDER,
+              rank: BUNDLE_RANK,
+              locator: { path: skill.path, directory: skill.directory, effective: row.effective } satisfies BundleLocator,
+            })
+          }
+        }
+        return candidates
+      } catch (error) {
+        console.error('[dsh-skillhub] bundle provider list failed', error)
+        return []
+      }
+    },
+    async get(candidate: SkillCandidate): Promise<SkillDefinition | undefined> {
+      const locator = candidate.locator as Partial<BundleLocator> | undefined
+      if (typeof locator?.path !== 'string') return undefined
+      const content = readBundleSkill(locator.path)
+      if (content === undefined) return undefined
+      return {
+        name: candidate.name,
+        description: candidate.description,
+        ...candidate.whenToUse !== undefined ? { whenToUse: candidate.whenToUse } : {},
+        invocation: candidate.invocation,
+        source: candidate.source,
+        provider: BUNDLE_PROVIDER,
+        resourceBase: { kind: 'directory', path: locator.directory ?? dirname(locator.path) },
+        path: locator.path,
+        content,
       }
     },
   }

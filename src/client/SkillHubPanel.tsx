@@ -2,9 +2,10 @@ import { McpPanel, type McpBulkActions } from './McpPanel.tsx'
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import {
   Button, IconChevronRightOutlineRegular, IconCordisPluginOutlineRegular, IconEllipsisOutlineRegular,
-  IconSearchOutlineRegular, IconSkillOutlineRegular, IconWarningOutlineRegular, Input, Menu, Pill,
-  Tag, Toast, Tooltip, writeClipboard,
+  IconPluginPinwheelOutlineRegular, IconSearchOutlineRegular, IconSkillOutlineRegular,
+  IconWarningOutlineRegular, Input, Menu, Pill, Tag, Toast, Tooltip, writeClipboard,
 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { PluginPanel } from './PluginPanel.tsx'
 import type { Translate } from '@deepseek-ai/dsh-client-ui-slots'
 import type { CatalogNode, CatalogPayload, Gate, GroupChild, GroupGate, HomeKind, LayerName, SkillRef } from './catalog-api.ts'
 import { fetchCatalog, postCatalog } from './catalog-api.ts'
@@ -83,7 +84,7 @@ function countSkills(nodes: readonly Node[]): { on: number; off: number } {
 function gateFromCounts(counts: { on: number; off: number }): GroupGate {
   return counts.on > 0 && counts.off > 0 ? 'mixed' : counts.on > 0 ? 'on' : 'off'
 }
-function skillCountLabel(t: Copy, total: number): string { return t(total === 1 ? 'count.skillsOne' : 'count.skills', { n: total }) }
+export function skillCountLabel(t: Copy, total: number): string { return t(total === 1 ? 'count.skillsOne' : 'count.skills', { n: total }) }
 function folderChildren(node: Node): GroupChild[] {
   if (node.kind === 'broken' || node.kind === 'root-skill') return []
   return node.children.filter(child => child.kind === 'broken' || collectSkillIds([child]).length > 0)
@@ -188,8 +189,9 @@ export function SkillHubPanel(props: {
   const [refreshing, setRefreshing] = useState(false)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [notice, setNotice] = useState<{ key: SkillHubKey; seq: number }>()
-  const [tab, setTab] = useState<'skills' | 'mcp'>('skills')
+  const [tab, setTab] = useState<'skills' | 'mcp' | 'plugins'>('skills')
   const [mcpServerCount, setMcpServerCount] = useState<number>()
+  const [pluginCount, setPluginCount] = useState<number>()
   const [mcpBulk, setMcpBulk] = useState<McpBulkActions>()
   const [moreOpen, setMoreOpen] = useState(false)
   const pending = useRef(false)
@@ -250,11 +252,14 @@ export function SkillHubPanel(props: {
   const counts = useMemo(() => catalog ? countSkills(catalog.tree.flatMap(home => home.children)) : { on: 0, off: 0 }, [catalog])
   const allSkillCount = counts.on + counts.off
   const canBulk = layerReady && !busy && catalog !== undefined && allSkillCount > 0
-  const moreDisabled = tab === 'mcp' ? mcpBulk === undefined || mcpBulk.disabled : !canBulk
+  // Packages have no bulk action yet: keep the shared menu honest on that tab.
+  const moreDisabled = tab === 'mcp' ? mcpBulk === undefined || mcpBulk.disabled
+    : tab === 'plugins' ? true
+      : !canBulk
   const moreItems = [
     { id: 'allOn', label: t('allOn'), disabled: moreDisabled },
     { id: 'allOff', label: t('allOff'), disabled: moreDisabled },
-    ...(tab === 'skills' ? [{ id: 'refreshSlash', label: t('refresh.slash'), disabled: busy }] : []),
+    ...(tab !== 'mcp' ? [{ id: 'refreshSlash', label: t('refresh.slash'), disabled: busy }] : []),
   ]
   const refreshSlash = async () => {
     if (pending.current) return
@@ -288,6 +293,10 @@ export function SkillHubPanel(props: {
           <IconCordisPluginOutlineRegular size={13} /><span>{t('tab.mcp')}</span>
           {mcpServerCount !== undefined && mcpServerCount > 0 ? <span className={css.pillCount}>{mcpServerCount}</span> : null}
         </Pill>
+        <Pill role="tab" aria-selected={tab === 'plugins'} active={tab === 'plugins'} onClick={() => setTab('plugins')}>
+          <IconPluginPinwheelOutlineRegular size={13} /><span>{t('tab.plugins')}</span>
+          {pluginCount !== undefined && pluginCount > 0 ? <span className={css.pillCount}>{pluginCount}</span> : null}
+        </Pill>
       </div>
       <div className={css.toolbarEnd}>
         {props.layers.length > 1 ? <div className={css.segment} role="radiogroup" aria-label={t('layer.aria')}>
@@ -303,7 +312,9 @@ export function SkillHubPanel(props: {
     </div>
     {tab === 'mcp' ? <McpPanel surface={props.surface} layer={layer} sessionId={sessionId} folder={folder}
       canWriteSession={canWriteSession} canWriteProject={canWriteProject} layerReady={layerReady}
-      onServerCountChange={setMcpServerCount} onBulkActions={setMcpBulk} t={t} /> : <>
+      onServerCountChange={setMcpServerCount} onBulkActions={setMcpBulk} t={t} />
+      : tab === 'plugins' ? <PluginPanel layer={layer} sessionId={sessionId} folder={folder}
+        layerReady={layerReady} onPluginCountChange={setPluginCount} t={t} /> : <>
       <label className={css.search}><Input className={css.field ?? ''} icon={<IconSearchOutlineRegular size={16} />}
         value={query} placeholder={t('search.placeholder')} aria-label={t('search.placeholder')}
         onChange={event => setQuery(event.currentTarget.value)} /></label>

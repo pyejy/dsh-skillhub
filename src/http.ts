@@ -1,5 +1,6 @@
 import type { installMcpVisibility } from './mcp-runtime.ts'
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { BundlePlugin } from './bundles.ts'
 import type { Catalog, HomeKind, SkillId } from './catalog.ts'
 import type { LayerName, SkillHub, ToggleTarget, VisibilityTarget } from './hub.ts'
 
@@ -116,6 +117,7 @@ export function handleSkillHubHttp(
   invalidate: () => void,
   requestRejection?: (req: IncomingMessage) => 401 | 403 | undefined,
   mcp?: ReturnType<typeof installMcpVisibility>,
+  bundles?: () => readonly BundlePlugin[],
 ) {
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     try {
@@ -136,6 +138,10 @@ export function handleSkillHubHttp(
         send(res, 200, mcp.catalog(query(url)))
         return
       }
+      if (req.method === 'GET' && path === '/bundles') {
+        send(res, 200, hub.bundleCatalog(bundles?.() ?? [], query(url)))
+        return
+      }
       if (req.method === 'GET' && (path === '/catalog' || path === '/')) {
         send(res, 200, clientCatalog(hub.catalog(query(url))))
         return
@@ -154,6 +160,29 @@ export function handleSkillHubHttp(
         for (const key of ['folder', 'sessionId']) if (body[key] !== undefined && typeof body[key] !== 'string') throw new Error(`invalid ${key}`)
         const q: import('./mcp.ts').McpCatalogQuery = { layer, ...(typeof body['folder'] === 'string' ? { folder: body['folder'] } : {}), ...(typeof body['sessionId'] === 'string' ? { sessionId: body['sessionId'] } : {}) }
         send(res, 200, mcp.mutate(q, body['server'], path === '/mcp/toggle' ? body['on'] as boolean : undefined))
+        return
+      }
+      if (path === '/bundles/toggle') {
+        const layer = body['layer']
+        if (layer !== 'global' && layer !== 'project' && layer !== 'session') {
+          send(res, 400, { error: 'invalid layer' })
+          return
+        }
+        if (typeof body['id'] !== 'string' || body['id'] === '') throw new Error('id required')
+        if (!/^(?:plugin|bundle):[^:]+(?::[^:]+)?$/u.test(body['id'])) throw new Error('invalid bundle id')
+        if (typeof body['on'] !== 'boolean') throw new Error('on must be boolean')
+        const toggle: { layer: LayerName; id: string; on: boolean; sessionId?: string; folder?: string } = {
+          layer,
+          id: body['id'],
+          on: body['on'],
+        }
+        if (typeof body['sessionId'] === 'string') toggle.sessionId = body['sessionId']
+        if (typeof body['folder'] === 'string') toggle.folder = body['folder']
+        hub.toggleBundle(toggle)
+        invalidate()
+        send(res, 200, hub.bundleCatalog(bundles?.() ?? [], { layer,
+          ...toggle.sessionId !== undefined ? { sessionId: toggle.sessionId } : {},
+          ...toggle.folder !== undefined ? { folder: toggle.folder } : {} }))
         return
       }
       if (path === '/toggle') {

@@ -259,7 +259,8 @@
 /* Body ------------------------------------------------------------------ */
 
 .body,
-.mcpBody {
+.mcpBody,
+.pluginBody {
   display: flex;
   min-height: 0;
   flex: 1 1 auto;
@@ -272,7 +273,8 @@
 }
 
 .root[data-surface='popover'] .body,
-.root[data-surface='popover'] .mcpBody {
+.root[data-surface='popover'] .mcpBody,
+.root[data-surface='popover'] .pluginBody {
   flex: 1 1 0;
   height: auto;
   overflow-y: auto;
@@ -334,7 +336,9 @@
 
 .root[aria-busy='true'] .body,
 .root[aria-busy='true'] .mcpBody,
-.mcpBody[aria-busy='true'] {
+.root[aria-busy='true'] .pluginBody,
+.mcpBody[aria-busy='true'],
+.pluginBody[aria-busy='true'] {
   opacity: .72;
 }
 
@@ -619,6 +623,46 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+/* Package layer: a package row owns the skill rows below it. A package that is
+ * off renders its skills closed and inert — the row keeps the resolved value so
+ * reopening the package shows each skill exactly as it was left. */
+
+.pluginList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.plugin {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.row[data-locked] {
+  opacity: .5;
+}
+
+.row[data-locked]:hover {
+  background: transparent;
+}
+
+/* The row already dims the switch; do not stack the disabled opacity on top. */
+.row[data-locked] .switch:disabled {
+  opacity: 1;
+}
+
+/* Aligned with the skill names one indent in: row padding, one depth step,
+   the chevron column and its gap. */
+.lockedHint {
+  margin: 0;
+  padding: 0 6px 2px calc(6px + 16px + 20px + 8px);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 17px;
 }
 
 @media (prefers-reduced-motion: reduce) {

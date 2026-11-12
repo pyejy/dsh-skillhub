@@ -7,9 +7,10 @@ import type { SkillProviderControl } from '@deepseek-ai/dsh-skill'
 import z from '@deepseek-ai/schemastery'
 import { McpHub } from './mcp.ts'
 import { installMcpVisibility } from './mcp-runtime.ts'
+import { discoverBundles, loadBundles, type BundlePlugin } from './bundles.ts'
 import { SkillHub } from './hub.ts'
 import { handleSkillHubHttp } from './http.ts'
-import { createSkillHubProvider } from './provider.ts'
+import { createBundleProvider, createSkillHubProvider } from './provider.ts'
 
 export const name = 'dsh-skillhub'
 export const inject = ['skills', 'webServer', 'connection', 'tools', 'agents']
@@ -61,6 +62,15 @@ export function apply(ctx: Context, config: Config) {
     control = next
     return createSkillHubProvider(hub)
   })
+  // Package-shipped skills: the cache is what the panel and the shadow provider
+  // read; the live registry only teaches it about packages it has not seen yet.
+  let plugins: readonly BundlePlugin[] = loadBundles(defaultStoreDir())
+  const readPlugins = (): readonly BundlePlugin[] => plugins
+  ctx.skills.registerProvider(() => createBundleProvider(hub, readPlugins))
+  void discoverBundles(ctx.skills, defaultStoreDir()).then((next) => {
+    plugins = next
+    control?.invalidate()
+  }).catch((error: unknown) => { console.error('[dsh-skillhub] bundle discovery failed', error) })
   const mcp = installMcpVisibility(ctx, new McpHub({ storeDir: defaultStoreDir() }))
   const invalidate = () => { control?.invalidate() }
   const connection = ctx.get('connection') as {
@@ -71,6 +81,7 @@ export function apply(ctx: Context, config: Config) {
     invalidate,
     request => connection === undefined ? 401 : connection.requestRejection(request),
     mcp,
+    readPlugins,
   )
   ctx.effect(() => ctx.webServer.register({
     kind: 'prefix',

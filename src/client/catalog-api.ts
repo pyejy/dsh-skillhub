@@ -97,6 +97,41 @@ export type GroupChild =
     reason: BrokenReason
   }
 
+/** One skill a package ships, with the store value and the resolved value. */
+export type BundleSkillView = {
+  id: string
+  name: string
+  /** Value stored for this skill's own row; the parent plugin is not folded in. */
+  gate: Gate
+  source: GateSource
+  /** Parent plugin ∧ own row — what the model actually runs with. */
+  effective: Gate
+  /** True while the owning plugin is off; the switch is display-only then. */
+  locked: boolean
+}
+
+/** One installed package that contributes skills to the catalogue. */
+export type BundlePluginView = {
+  name: string
+  root: string
+  gate: Gate
+  source: GateSource
+  skills: BundleSkillView[]
+}
+
+/** `/skillhub/bundles` snapshot for one scope. */
+export type BundleCatalog = {
+  layer: LayerName
+  plugins: BundlePluginView[]
+}
+
+/** Scope selector shared by the bundle endpoints. */
+export type BundleQuery = {
+  layer: LayerName
+  sessionId?: string
+  folder?: string
+}
+
 const BASE = '/skillhub'
 
 async function readJson(response: Response): Promise<unknown> {
@@ -153,4 +188,41 @@ export async function postCatalog(path: string, body: Record<string, unknown>): 
     return (payload as { catalog: CatalogPayload }).catalog
   }
   throw new Error('SkillHub returned an unexpected response')
+}
+
+function bundleQuery(query: BundleQuery): Record<string, string> {
+  const params = new URLSearchParams()
+  params.set('layer', query.layer)
+  if (query.sessionId !== undefined && query.sessionId !== '') params.set('sessionId', query.sessionId)
+  if (query.folder !== undefined && query.folder !== '') params.set('folder', query.folder)
+  return Object.fromEntries(params)
+}
+
+function asBundleCatalog(payload: unknown): BundleCatalog {
+  if (typeof payload === 'object' && payload !== null && Array.isArray((payload as { plugins?: unknown }).plugins)) {
+    return payload as BundleCatalog
+  }
+  throw new Error('SkillHub returned an unexpected response')
+}
+
+/** Package contributions of one scope, with their effective gates. */
+export async function fetchBundles(query: BundleQuery): Promise<BundleCatalog> {
+  const params = new URLSearchParams(bundleQuery(query))
+  const response = await fetch(`${BASE}/bundles?${params.toString()}`)
+  return asBundleCatalog(await readJson(response))
+}
+
+/**
+ * Write one gate of the bundle layer and return that layer's fresh snapshot.
+ * @param query - scope of the layer document to write.
+ * @param id - `plugin:<package>` or `bundle:<package>:<skill>`.
+ * @param on - target gate.
+ */
+export async function postBundleToggle(query: BundleQuery, id: string, on: boolean): Promise<BundleCatalog> {
+  const response = await fetch(`${BASE}/bundles/toggle`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ...bundleQuery(query), id, on }),
+  })
+  return asBundleCatalog(await readJson(response))
 }
