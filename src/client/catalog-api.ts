@@ -256,6 +256,17 @@ function bundleQuery(query: BundleQuery): Record<string, string> {
   return Object.fromEntries(params)
 }
 
+/** MCP server rows for this scope; the MCP tab renders the same payload. */
+export async function fetchMcpCatalog(query: GroupQuery): Promise<McpCatalog> {
+  const params = new URLSearchParams(bundleQuery(query))
+  const response = await fetch(`${BASE}/mcp/catalog?${params.toString()}`)
+  const payload = await readJson(response)
+  if (typeof payload !== 'object' || payload === null || !Array.isArray((payload as { servers?: unknown }).servers)) {
+    throw new Error('SkillHub returned an unexpected response')
+  }
+  return payload as McpCatalog
+}
+
 function asBundleCatalog(payload: unknown): BundleCatalog {
   if (typeof payload === 'object' && payload !== null && Array.isArray((payload as { plugins?: unknown }).plugins)) {
     return payload as BundleCatalog

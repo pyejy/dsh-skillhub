@@ -12,7 +12,7 @@ import type { Translate } from '@deepseek-ai/dsh-client-ui-slots'
 import type {
   CatalogNode, CatalogPayload, Gate, GroupCatalog, GroupChild, GroupGate, HomeKind, LayerName, SkillRef,
 } from './catalog-api.ts'
-import { fetchCatalog, fetchGroups, postCatalog, postGroupToggle, postMcpToggle } from './catalog-api.ts'
+import { fetchBundles, fetchCatalog, fetchGroups, fetchMcpCatalog, postCatalog, postGroupToggle, postMcpToggle } from './catalog-api.ts'
 import type { SkillHubKey } from './locales.ts'
 import css from './SkillHubPanel.module.css'
 import { refreshSkillAutocomplete } from './slash-refresh.ts'
@@ -234,15 +234,22 @@ export function SkillHubPanel(props: {
     try {
       // Both reads travel together: the groups snapshot is what locks the 技能
       // and MCP rows, and a failing groups read must not blank the catalogue.
-      const [catalogRead, groupsRead] = await Promise.allSettled([
+      const query = { layer, ...(sessionId ? { sessionId } : {}), ...(folder ? { folder } : {}) }
+      const [catalogRead, groupsRead, mcpRead, bundlesRead] = await Promise.allSettled([
         fetchCatalog(sessionId, folder === '' ? undefined : folder, layer),
-        fetchGroups({ layer, ...(sessionId ? { sessionId } : {}), ...(folder ? { folder } : {}) }),
+        fetchGroups(query),
+        // Tab badges must be right before the tab is opened: the child panels
+        // only report a count once they mount, which left 插件 and MCP blank.
+        fetchMcpCatalog(query),
+        fetchBundles(query),
       ])
       if (key !== activeKey.current || current !== generation.current) return
       if (catalogRead.status === 'fulfilled') { setCatalog(catalogRead.value); setError(undefined) }
       else setError(String(catalogRead.reason))
       if (groupsRead.status === 'fulfilled') { setGroups(groupsRead.value); setGroupsError(undefined) }
       else setGroupsError(String(groupsRead.reason))
+      if (mcpRead.status === 'fulfilled') setMcpServerCount(mcpRead.value.servers.length)
+      if (bundlesRead.status === 'fulfilled') setPluginCount(bundlesRead.value.plugins.length)
     } finally {
       inFlight.current -= 1
       if (inFlight.current === 0) setRefreshing(false)
