@@ -195,13 +195,19 @@ export function handleSkillHubHttp(
         }
         if (typeof body['name'] !== 'string' || body['name'] === '') throw new Error('name required')
         if (typeof body['on'] !== 'boolean') throw new Error('on must be boolean')
-        hub.toggleBundle({
-          layer,
-          id: groupGateId(body['name']),
-          on: body['on'],
-          ...typeof body['sessionId'] === 'string' ? { sessionId: body['sessionId'] } : {},
-          ...typeof body['folder'] === 'string' ? { folder: body['folder'] } : {},
-        })
+        const scope: { layer: LayerName; sessionId?: string; folder?: string } = { layer }
+        if (typeof body['sessionId'] === 'string') scope.sessionId = body['sessionId']
+        if (typeof body['folder'] === 'string') scope.folder = body['folder']
+        // A group is a master switch: carrying it to the members is what makes
+        // "open the group" mean "everything under it works", instead of leaving
+        // the children on their own older values while the parent claims on.
+        const before = groupsPayload(hub, mcp, query(url)).groups.find(group => group.name === body['name'])
+        if (before === undefined) throw new Error('no such group')
+        hub.toggleBundle({ ...scope, id: groupGateId(before.name), on: body['on'] })
+        for (const member of before.skills) hub.toggleBundle({ ...scope, id: member.id, on: body['on'] })
+        if (mcp !== undefined) {
+          for (const member of before.servers) mcp.mutate(scope, member.name, body['on'])
+        }
         invalidate()
         send(res, 200, groupsPayload(hub, mcp, query(url)))
         return

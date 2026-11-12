@@ -1,4 +1,4 @@
-import type { Gate, SkillId, VisibilityLayer } from './catalog.ts'
+import type { Gate, GroupGate, SkillId, VisibilityLayer } from './catalog.ts'
 import type { McpGate, McpServerView } from './mcp.ts'
 
 /** One skill inside a group, with the gate the runtime would enforce. */
@@ -29,7 +29,8 @@ export interface GroupServerView {
 export interface GroupView {
   readonly name: string
   readonly kind: 'capability' | 'family'
-  readonly gate: Gate
+  /** Off when the group is closed; otherwise on only when every member is on. */
+  readonly gate: GroupGate
   readonly source: VisibilityLayer
   readonly skills: readonly GroupSkillView[]
   readonly servers: readonly GroupServerView[]
@@ -120,10 +121,15 @@ export function computeGroups(
       })
     }
     const server = serverByName.get(name)
+    const membersOn = skills.every(skill => skill.effective === 'on')
+      && (server === undefined || (parent.gate === 'on' && server.gate === 'on'))
+    // A group that is open but holds a closed member reads as mixed, so the row
+    // never claims "on" while something under it is off.
+    const gate: GroupGate = parent.gate === 'off' ? 'off' : membersOn ? 'on' : 'mixed'
     groups.push({
       name,
       kind: entry.kind,
-      gate: parent.gate,
+      gate,
       source: parent.source,
       skills,
       servers: server === undefined ? [] : [{
